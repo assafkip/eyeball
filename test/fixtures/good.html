@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- eyeball fixture: GOOD. Self-contained, no network. Passes every default check:
+     hero inside the viewport, a real (non-banned) rendered font, reveal below the
+     hero, a background signature (overlap-exempt), a draggable clear of the hero. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GOOD fixture</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow-x: hidden; background: #f4f4f5; color: #14141a; }
+  [data-hero-h1] { font-family: Georgia, "Times New Roman", serif; font-size: 56px;
+    line-height: 1.05; max-width: 900px; margin: 80px 48px 0; opacity: 1; }
+  [data-reveal] { font-family: Georgia, serif; margin: 1600px 48px 0; color: #2c6b86; }
+  [data-signature] { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; }
+  [data-draggable] { position: fixed; right: 24px; bottom: 24px; width: 36px; height: 36px;
+    border-radius: 999px; background: #b5854a; border: 0; }
+</style>
+</head>
+<body>
+  <svg data-signature aria-hidden="true" width="100%" height="100%"></svg>
+  <h1 data-hero-h1>A clean page. The headline sits where it should.</h1>
+  <button data-draggable aria-label="drag the marker"></button>
+  <p data-reveal>The reveal lives below the fold and never covers the headline.</p>
+</body>
+</html>

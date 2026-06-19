@@ -1,0 +1,20 @@
+# node
+node_modules/
+npm-debug.log*
+.npm/
+*.tgz
+
+# local browser caches / eyeball scratch
+.cache/
+ms-playwright/
+tmp/
+eyeball-*/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# local config override (commit eyeball.config.example.json, not a machine config)
+eyeball.config.local.json

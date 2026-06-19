@@ -1,0 +1,32 @@
+{
+  "name": "eyeball",
+  "version": "0.1.0",
+  "description": "Put a real browser in your CI gate. Asserts layout/render facts (headline past the fold, text-on-text, control-on-headline, webfont fell back to Arial, console errors) with zero npm dependencies, driving a chromium already on disk over CDP via Node's built-in WebSocket.",
+  "type": "module",
+  "bin": {
+    "eyeball": "src/cli.mjs"
+  },
+  "exports": {
+    ".": "./src/render.mjs",
+    "./assert": "./src/assert.mjs"
+  },
+  "scripts": {
+    "test": "node test/selftest.mjs",
+    "doctor": "node src/cli.mjs --doctor"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "ci",
+    "visual-regression",
+    "layout",
+    "headless",
+    "chrome",
+    "cdp",
+    "render-gate",
+    "no-dependencies"
+  ],
+  "license": "MIT",
+  "dependencies": {}
+}

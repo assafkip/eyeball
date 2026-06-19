@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- eyeball fixture: BAD (fold). A hard max-width on a large headline collapses it
+     into a tall tower whose box runs far past the first viewport. ONLY the
+     hero-in-viewport check trips. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BAD fold</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow-x: hidden; background: #f4f4f5; color: #14141a; }
+  [data-hero-h1] { font-family: Georgia, serif; font-size: 90px; line-height: 1.05;
+    max-width: 180px; margin: 80px 48px 0; opacity: 1; }
+  [data-reveal] { font-family: Georgia, serif; margin: 2400px 48px 0; }
+  [data-signature] { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; }
+  [data-draggable] { position: fixed; right: 24px; bottom: 24px; width: 36px; height: 36px; }
+</style>
+</head>
+<body>
+  <svg data-signature aria-hidden="true" width="100%" height="100%"></svg>
+  <h1 data-hero-h1>This headline is far too tall and runs well past the first screen today</h1>
+  <button data-draggable aria-label="drag"></button>
+  <p data-reveal>below</p>
+</body>
+</html>

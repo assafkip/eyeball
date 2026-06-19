@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- eyeball fixture: BAD (overlap). The reveal is pinned (position:fixed) directly
+     over the headline, two blocks of text on the same pixels. ONLY the
+     reveal-over-hero check trips. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BAD overlap</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow-x: hidden; background: #0b1020; color: #e8e8ef; }
+  [data-hero-h1] { font-family: Georgia, serif; font-size: 52px; line-height: 1.05;
+    max-width: 820px; margin: 80px 48px 0; opacity: 1; }
+  [data-reveal] { position: fixed; top: 96px; left: 64px; max-width: 600px;
+    font-family: Georgia, serif; color: #5cc2e0; }
+  [data-signature] { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; }
+  [data-draggable] { position: fixed; right: 24px; bottom: 24px; width: 36px; height: 36px; }
+</style>
+</head>
+<body>
+  <svg data-signature aria-hidden="true" width="100%" height="100%"></svg>
+  <h1 data-hero-h1>The headline you can barely read.</h1>
+  <p data-reveal>This sentence is printed straight through the headline above it.</p>
+  <button data-draggable aria-label="drag"></button>
+</body>
+</html>

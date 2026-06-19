@@ -1,0 +1,25 @@
+{
+  "viewports": [
+    { "name": "desktop", "w": 1440, "h": 900 },
+    { "name": "mobile", "w": 390, "h": 844, "mobile": true }
+  ],
+  "selectors": {
+    "hero": ["[data-hero-h1]", "h1"],
+    "reveal": ["[data-reveal]", ".truth"],
+    "signature": ["[data-signature]"],
+    "draggable": ["[data-draggable]"]
+  },
+  "checks": {
+    "heroInViewport": true,
+    "noRevealOverHero": true,
+    "noDraggableOnHero": true,
+    "noSignatureOverHero": true,
+    "heroFontNotBanned": ["arial", "helvetica", "system"],
+    "noConsoleErrors": true,
+    "requireGlobals": [],
+    "noXOverflow": true,
+    "heroMinOpacity": 0.9
+  },
+  "settleMs": 1200,
+  "scrollFire": true
+}
