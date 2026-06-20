@@ -18,6 +18,38 @@ import { assertPublicUrl, hostIsBlocked, BlockedUrlError } from "../lib/guard.mj
 import { buildReport } from "../lib/report.mjs";
 import { render, measureExpr, SCROLL_FIRE_EXPR } from "../lib/engine/render.mjs";   // vendored copy of ../../src
 import { assertRender } from "../lib/engine/assert.mjs";
+import { rateLimit, acquireSlot, releaseSlot } from "../lib/ratelimit.mjs";
+
+// abuse limits for the public endpoint (a render is expensive).
+const PER_MIN = 6, PER_HOUR = 40, MAX_CONCURRENT = 4;
+
+function clientIp(req) {
+  const h = req.headers || {};
+  // Prefer Vercel's platform-set client IP (x-vercel-forwarded-for / x-real-ip) over
+  // the client-controllable x-forwarded-for chain, which an attacker can rotate to
+  // get fresh rate-limit buckets. The per-IP limit is friction anyway; the real
+  // abuse defenses are the captcha + the concurrency slot + a Vercel spend cap.
+  const ip = h["x-vercel-forwarded-for"] || h["x-real-ip"] ||
+    String(h["x-forwarded-for"] || "").split(",")[0].trim();
+  return ip || (req.socket && req.socket.remoteAddress) || "unknown";
+}
+
+/* Cloudflare Turnstile (free). Captcha is OFF until TURNSTILE_SECRET is set, then
+   every render requires a valid token. The strongest defense against scripted abuse. */
+async function verifyTurnstile(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET;
+  if (!secret) return true;        // not configured -> open (rate limit still applies)
+  if (!token) return false;
+  try {
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret, response: token, remoteip: ip || "" }),
+    });
+    const j = await r.json();
+    return !!(j && j.success);
+  } catch { return false; }
+}
 
 const CONFIG = {
   viewports: [
@@ -212,6 +244,27 @@ export default async function handler(req, res) {
   } catch { /* fall through to missing-url */ }
   if (!raw) return send(res, 400, { error: "Pass a url, e.g. ?url=https://example.com" });
 
+  const ip = clientIp(req);
+
+  // captcha (if configured): the strongest defense against scripted abuse.
+  const token = (req.query && (req.query["cf-turnstile-response"] || req.query.token)) ||
+    (req.body && (typeof req.body === "object") ? req.body["cf-turnstile-response"] : undefined);
+  if (!(await verifyTurnstile(token, ip))) {
+    return send(res, 403, { error: "Captcha required. Complete the challenge and try again." });
+  }
+
+  // abuse limits: a render is expensive, so cap per-IP and per-instance concurrency.
+  const perMin = rateLimit(`m:${ip}`, PER_MIN, 60_000);
+  const perHour = rateLimit(`h:${ip}`, PER_HOUR, 3_600_000);
+  if (!perMin.ok || !perHour.ok) {
+    const retryMs = Math.max(perMin.retryMs || 0, perHour.retryMs || 0);
+    res.setHeader("retry-after", Math.ceil(retryMs / 1000));
+    return send(res, 429, { error: "Too many checks. Give it a minute and try again." });
+  }
+  if (!acquireSlot(MAX_CONCURRENT)) {
+    return send(res, 429, { error: "Busy right now. Try again in a few seconds." });
+  }
+
   try {
     const report = await runCheck(raw);
     return send(res, 200, { url: raw, ...report });
@@ -220,8 +273,10 @@ export default async function handler(req, res) {
     if (e && e.message === "render-timeout") return send(res, 504, { error: "The page took too long to render." });
     // log internally (Vercel function logs) but never echo internal stacks to the client.
     console.error("eyeball render error:", e && e.stack ? e.stack : e);
-    var out = { error: "Could not render that URL. Check it loads in a browser and try again." };
+    const out = { error: "Could not render that URL. Check it loads in a browser and try again." };
     if (process.env.EYEBALL_DEBUG === "1") out.debug = String((e && e.message) || e);
     return send(res, 502, out);
+  } finally {
+    releaseSlot();
   }
 }

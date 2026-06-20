@@ -12,6 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPublicUrl } from "../lib/guard.mjs";
 import { buildReport } from "../lib/report.mjs";
+import { rateLimit, acquireSlot, releaseSlot, _reset } from "../lib/ratelimit.mjs";
 import { render } from "../lib/engine/render.mjs";   // vendored copy (web/ self-contained)
 import { assertRender } from "../lib/engine/assert.mjs";
 
@@ -70,6 +71,17 @@ async function main() {
   const data = await render(join(HERE, "../../test/fixtures/bad-fold.html"), cfg);
   const report = buildReport(data, assertRender(data, cfg));
   ok("engine render -> report flags the seeded fold defect", report.viewports.some((v) => v.defects.some((d) => d.rule === "headline-past-fold")));
+
+  // 4) abuse limiter: allows up to max, then blocks; concurrency slots release.
+  _reset();
+  const t0 = 1_000_000;
+  for (let i = 0; i < 3; i++) ok(`ratelimit allows hit ${i + 1}/3`, rateLimit("ip1", 3, 60_000, t0 + i).ok === true);
+  ok("ratelimit blocks the 4th", rateLimit("ip1", 3, 60_000, t0 + 3).ok === false);
+  ok("ratelimit isolates other keys", rateLimit("ip2", 3, 60_000, t0 + 3).ok === true);
+  ok("ratelimit window slides", rateLimit("ip1", 3, 60_000, t0 + 60_001).ok === true);
+  ok("concurrency: 2 slots then full", acquireSlot(2) && acquireSlot(2) && acquireSlot(2) === false);
+  releaseSlot(); ok("concurrency: a release frees a slot", acquireSlot(2) === true);
+  releaseSlot(); releaseSlot();
 
   console.log(`api-smoke: ${n} checks passed`);
 }

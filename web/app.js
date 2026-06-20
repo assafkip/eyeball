@@ -61,17 +61,37 @@
     result.appendChild(box);
   }
 
+  // captcha (Cloudflare Turnstile): dormant until the server exposes a site key.
+  // Only call the API over http(s); on a file:// open (the eyeball gate renders the
+  // page locally) a fetch would log a console error and fail our own gate.
+  var siteKey = null, captchaToken = null;
+  var served = location.protocol === "http:" || location.protocol === "https:";
+  if (served) fetch("/api/config").then(function (r) { return r.json(); }).then(function (cfg) {
+    siteKey = cfg && cfg.turnstileSiteKey;
+    if (!siteKey) return;
+    window.__eyeballTs = function () {
+      if (window.turnstile) window.turnstile.render("#captcha", { sitekey: siteKey, callback: function (t) { captchaToken = t; } });
+    };
+    var s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__eyeballTs";
+    s.async = true; s.defer = true;
+    document.head.appendChild(s);
+    var cap = document.getElementById("captcha"); if (cap) cap.hidden = false;
+  }).catch(function () { /* config optional */ });
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var url = (input.value || "").trim();
     if (!url) return;
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    if (siteKey && !captchaToken) { fail("Please complete the captcha first."); return; }
     setBusy(true);
     result.hidden = false;
     result.innerHTML = "";
     result.appendChild(el("p", "looking", "Rendering " + url + " in a real browser…"));
 
-    fetch("/api/check?url=" + encodeURIComponent(url))
+    var q = "/api/check?url=" + encodeURIComponent(url) + (captchaToken ? "&cf-turnstile-response=" + encodeURIComponent(captchaToken) : "");
+    fetch(q)
       .then(function (r) {
         return r.text().then(function (t) {
           var body;
@@ -84,6 +104,10 @@
         render(res.body);
       })
       .catch(function () { fail("Something went wrong reaching the renderer. Try again."); })
-      .finally(function () { setBusy(false); });
+      .finally(function () {
+        setBusy(false);
+        captchaToken = null;   // Turnstile tokens are single-use
+        if (siteKey && window.turnstile) { try { window.turnstile.reset("#captcha"); } catch (e) {} }
+      });
   });
 })();
