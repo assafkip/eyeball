@@ -50,7 +50,26 @@ Vercel dashboard (Settings -> Environment Variables) so plain `vercel deploy`
 works without `-e`. The CLI env-add for the Preview target was flaky in testing;
 the dashboard is the reliable place.
 
-## SECURITY: pre-public-launch gate (REQUIRED before advertising this URL)
+## PUBLIC (2026-06-20)
+
+Deployment protection is OFF; the tool is publicly reachable and rendering:
+- **https://eyeball-web-assaf-kipnis-projects.vercel.app** (also `eyeball-web.vercel.app`)
+- Verified public (no auth): example.com -> clean/100; news.ycombinator.com -> 80
+  (2 issues); vercel.com -> 0 (10 issues); stripe.com -> graceful timeout.
+
+Live abuse protection: per-IP rate limit (6/min, 40/hour), a per-instance
+concurrency slot, the SSRF guard, and a hard render timeout. Cloudflare Turnstile
+captcha is BUILT and turns on automatically once its keys are set.
+
+### Before promoting it widely (do these 2):
+1. **Captcha:** create a free Cloudflare Turnstile widget, then add
+   `TURNSTILE_SITEKEY` + `TURNSTILE_SECRET` to the Vercel project env (all
+   environments). The frontend widget + backend enforcement activate automatically.
+2. **Spend cap:** set a Vercel spend limit (Settings -> Billing) so abuse can never
+   run up an unbounded bill. The in-memory rate limit is best-effort per instance;
+   durable rate limiting (Vercel KV) + the spend cap are the real backstops.
+
+## SECURITY: pre-public-launch gate (hardening detail)
 
 The MVP preview is unadvertised and protected by: the SSRF guard (resolve-all-
 records IPv4/IPv6 blocklist, encoded-IP parsing), browser-level request
