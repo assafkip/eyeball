@@ -81,7 +81,20 @@ export const DESIGN_SIGNALS_EXPR = `(() => {
   const genericCopy = PHRASES.filter((p) => text.includes(p)).slice(0, 6);
   const badge = /powered by ai|ai-powered|\\u2728/i.test((body && body.innerText) || "");
 
-  return { h1Font, bodyFont, bannedFont, gradientText, gradientBg, emojiInUi, cardTriplet, genericCopy, badge };
+  // 7) UX: is a primary action (input or a real CTA) visible in the first screen?
+  const foldH = window.innerHeight || 800;
+  const CTA = /\\b(start|try|get started|sign up|sign in|paste|check|score|search|demo|free|submit|buy|book|download|join|continue)\\b/;
+  let actionInFold = false, anyAction = false;
+  for (const el of Array.from(document.querySelectorAll("input,textarea,button,a")).slice(0, 200)) {
+    const interactive = el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "BUTTON" || CTA.test(lc(el.textContent || ""));
+    if (!interactive) continue;
+    let r; try { r = el.getBoundingClientRect(); } catch { continue; }
+    if (r.width < 40 || r.height < 18) continue;        // skip tiny nav links
+    anyAction = true;
+    if (r.top >= 0 && r.top < foldH) { actionInFold = true; break; }
+  }
+
+  return { h1Font, bodyFont, bannedFont, gradientText, gradientBg, emojiInUi, cardTriplet, genericCopy, badge, actionInFold, anyAction };
 })()`;
 
 const FONT_LABEL = {
@@ -164,5 +177,17 @@ export function scoreFromSignals(signals) {
   else if (score <= 70) { band = "somewhat generic"; verdict = "A few clear tells. It's halfway to looking like everyone else's AI site."; }
   else { band = "very AI-looking"; verdict = "This is the look people now read as 'an AI made it.' The fixes below are where to start."; }
 
-  return { aiScore: score, band, verdict, tells, mode: "scan" };
+  // deterministic UX subset (the full UX-researcher read is the paid vision mode)
+  const ux = {
+    primaryActionInFold: !!s.actionInFold,
+    bounceRisk: !s.actionInFold ? "high" : (score >= 70 ? "medium" : "low"),
+    issues: [],
+  };
+  if (!s.actionInFold) ux.issues.push({
+    issue: "No clear action in the first screen",
+    severity: "high",
+    fix: "Put the one thing a visitor should do (the input, the signup, the main button) above the fold so the page is usable without scrolling.",
+  });
+
+  return { aiScore: score, band, verdict, tells, ux, mode: "scan" };
 }

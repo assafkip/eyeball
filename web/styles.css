@@ -198,6 +198,17 @@ body { margin: 0; }
 .tell-fix { font-size: 14px; line-height: 1.5; margin: 0; color: #2c2620; }
 .tell-fix b { color: var(--amber); font-family: "JetBrains Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
 .clean-note { background: #fff; border: 1px solid var(--paper-2); border-radius: 10px; padding: 18px; font-size: 15px; color: #2f7d4f; }
+
+/* UX read */
+.ux-out { margin-top: 18px; display: grid; gap: 12px; }
+.ux-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ux-label { font-family: "Fraunces", serif; font-weight: 600; font-size: 18px; margin-right: 6px; }
+.ux-metric { font-family: "JetBrains Mono", monospace; font-size: 12px; padding: 4px 9px; border-radius: 999px; background: #fff; border: 1px solid var(--paper-2); color: #5a5248; }
+.ux-metric.risk-low { color: #2f7d4f; border-color: #b9d8c4; }
+.ux-metric.risk-medium { color: var(--amber); border-color: #e6cfa0; }
+.ux-metric.risk-high { color: var(--red); border-color: #f0b3ae; }
+.ux-summary { font-size: 15px; color: #5a5248; line-height: 1.55; margin: 0; }
+.ux-issue { border-left-color: var(--amber); }
 .looking { color: #8a8175; font-style: italic; }
 .scan-tag { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #8a8175; margin: 14px 0 0; text-transform: uppercase; letter-spacing: 1px; }
 

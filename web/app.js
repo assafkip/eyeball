@@ -64,7 +64,32 @@
       });
       result.appendChild(out);
     }
-    result.appendChild(el("p", "scan-tag", report.mode === "vision" ? "Claude vision read" : "Free quick scan"));
+    // UX read (FAANG UX-researcher lens): time-to-understand, bounce risk, fixes
+    if (report.ux) {
+      var ux = report.ux;
+      var wrap = el("div", "ux-out");
+      var head = el("div", "ux-head");
+      head.appendChild(el("span", "ux-label", "UX read"));
+      if (typeof ux.secondsToUnderstand === "number") head.appendChild(el("span", "ux-metric", "~" + ux.secondsToUnderstand + "s to get it"));
+      if (ux.bounceRisk) head.appendChild(el("span", "ux-metric risk-" + ux.bounceRisk, "bounce risk: " + ux.bounceRisk));
+      if (ux.primaryActionInFold === false) head.appendChild(el("span", "ux-metric risk-high", "action below the fold"));
+      wrap.appendChild(head);
+      if (ux.summary) wrap.appendChild(el("p", "ux-summary", ux.summary));
+      var issues = ux.issues || [];
+      if (!issues.length) {
+        wrap.appendChild(el("p", "clean-note", "First-screen UX reads clear."));
+      } else {
+        issues.forEach(function (i) {
+          var c = el("div", "tell ux-issue");
+          c.appendChild(el("div", "tell-name", i.issue || ""));
+          if (i.fix) { var f = el("p", "tell-fix"); f.appendChild(el("b", null, "fix ")); f.appendChild(document.createTextNode(i.fix)); c.appendChild(f); }
+          wrap.appendChild(c);
+        });
+      }
+      result.appendChild(wrap);
+    }
+
+    result.appendChild(el("p", "scan-tag", report.mode === "vision" ? "Claude design + UX read" : "Free quick scan"));
     result.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
