@@ -15,7 +15,7 @@ import { assertPublicUrl } from "../lib/guard.mjs";
 import { rateLimit, acquireSlot, releaseSlot, _reset } from "../lib/ratelimit.mjs";
 import { scoreFromSignals, DESIGN_SIGNALS_EXPR } from "../lib/aiscore.mjs";
 import { visionKillSwitchOn, storeReady, reserveSpend, consumeCaptchaToken, freeQuota, durableRateLimit } from "../lib/spendguard.mjs";
-import { findBrowser } from "../lib/engine/render.mjs";
+import { findBrowser } from "../lib/browser.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let n = 0;
@@ -75,7 +75,7 @@ async function main() {
   releaseSlot(); ok("concurrency: release frees a slot", acquireSlot(2) === true);
   releaseSlot(); releaseSlot();
 
-  // 5) local render of our own slop page -> the scanner catches its own tells
+  // 5) render a slop FIXTURE (detector catches tells) + our own page (dogfood: clean)
   const browser = findBrowser();
   if (!browser) {
     console.log("api-smoke: NOTE local render skipped (no on-disk chromium)");
@@ -83,17 +83,27 @@ async function main() {
     const puppeteer = (await import("puppeteer-core")).default;
     const b = await puppeteer.launch({ executablePath: browser, headless: true, args: ["--no-sandbox"] });
     try {
-      const page = await b.newPage();
-      await page.setViewport({ width: 1280, height: 800 });
-      await page.goto(pathToFileURL(join(HERE, "../index.html")).href, { waitUntil: "load", timeout: 12000 });
-      await new Promise((r) => setTimeout(r, 400));
-      const signals = await page.evaluate(DESIGN_SIGNALS_EXPR);
-      ok("slop page: detects the Inter/banned font", signals.bannedFont === true);
-      ok("slop page: detects gradient", signals.gradientText === true || signals.gradientBg === true);
-      ok("slop page: detects emoji-as-icon", signals.emojiInUi === true);
-      ok("slop page: detects stock-prompt copy", Array.isArray(signals.genericCopy) && signals.genericCopy.length >= 2);
-      const rep = scoreFromSignals(signals);
-      ok("slop page scores high (>=70)", rep.aiScore >= 70);
+      const sig = async (rel) => {
+        const page = await b.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.goto(pathToFileURL(join(HERE, rel)).href, { waitUntil: "load", timeout: 12000 });
+        await new Promise((r) => setTimeout(r, 400));
+        const s = await page.evaluate(DESIGN_SIGNALS_EXPR);
+        await page.close();
+        return s;
+      };
+      // the detector catches a known-slop fixture
+      const slop = await sig("fixtures/slop.html");
+      ok("slop fixture: detects banned font", slop.bannedFont === true);
+      ok("slop fixture: detects gradient text", slop.gradientText === true);
+      ok("slop fixture: detects emoji-as-icon", slop.emojiInUi === true);
+      ok("slop fixture: detects stock-prompt copy", Array.isArray(slop.genericCopy) && slop.genericCopy.length >= 2);
+      ok("slop fixture scores high (>=70)", scoreFromSignals(slop).aiScore >= 70);
+      // dogfood: our own landing passes its own gate
+      const mine = await sig("../index.html");
+      const rep = scoreFromSignals(mine);
+      ok("our page is clean (AI <= 35)", rep.aiScore <= 35);
+      ok("our page: primary action in the first screen", mine.actionInFold === true);
     } finally { try { await b.close(); } catch {} }
   }
 

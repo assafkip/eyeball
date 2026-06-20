@@ -17,7 +17,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { findBrowser } from "./lib/engine/render.mjs";
+import { findBrowser } from "./lib/browser.mjs";
 import { DESIGN_SIGNALS_EXPR, scoreFromSignals } from "./lib/aiscore.mjs";
 
 const argv = process.argv.slice(2);

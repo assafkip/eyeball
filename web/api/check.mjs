@@ -20,7 +20,7 @@ import dns from "node:dns/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { assertPublicUrl, hostIsBlocked, BlockedUrlError } from "../lib/guard.mjs";
-import { findBrowser } from "../lib/engine/render.mjs";   // on-disk browser resolver (local dev)
+import { findBrowser } from "../lib/browser.mjs";   // on-disk browser resolver (local dev)
 import { rateLimit, acquireSlot, releaseSlot } from "../lib/ratelimit.mjs";
 import { DESIGN_SIGNALS_EXPR, scoreFromSignals } from "../lib/aiscore.mjs";
 import { scoreDesign, isJpegBase64 } from "../lib/vision.mjs";
