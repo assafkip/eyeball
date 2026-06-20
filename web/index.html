@@ -3,53 +3,103 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>eyeball — is your site actually broken?</title>
-<meta name="description" content="Paste a URL. A real browser renders it at desktop and mobile and tells you what's visually broken: headline past the fold, text on text, a font that fell back to Arial, console errors. The stuff your tests pass right over." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1714'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='8' fill='none' stroke='%23e8a13a' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23e8a13a'/%3E%3C/svg%3E" />
+<title>eyeball — does your site look AI-generated?</title>
+<meta name="description" content="Paste your URL. Claude looks at a real screenshot and scores how AI-generated your design looks, names every tell, and tells you how to fix each one. This whole landing page is every AI cliche on purpose." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1714'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='8' fill='none' stroke='%23e8443a' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23e8443a'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<!-- Two type systems on purpose: Inter = the AI-slop tell. Fraunces + Mono = the human counter-voice. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Fraunces:opsz,wght@9..144,400..600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-<header class="bar">
-  <span class="brand"><span class="eye" aria-hidden="true"></span> eyeball</span>
-  <a class="ghost" href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">open source &rarr;</a>
+
+<!-- ░░░ THE SLOP ░░░ Everything in .slop is a deliberate AI-design cliche. Each one is marked. -->
+
+<header class="slop-nav">
+  <span class="slop-logo">◇ Synergy<span class="grad">AI</span></span>
+  <nav class="slop-links">
+    <a>Product</a><a>Solutions</a><a>Pricing</a>
+    <a class="slop-cta-sm">Get Started Free</a>
+  </nav>
+  <aside class="mark mark-nav">Generic diamond logo + a word with "AI" gradient-glued on. Tell #1.</aside>
 </header>
 
-<main class="wrap">
-  <section class="hero">
-    <p class="kicker">render health, in one paste</p>
-    <h1 data-hero-h1 id="head">Your site passes every test and still looks broken.</h1>
-    <p class="lede">Functional tests check that buttons click. They never see a headline shoved past the fold, two sentences printed on the same pixels, or a font that quietly fell back to Arial. A real browser does. So does eyeball.</p>
+<main>
+<section class="slop-hero">
+  <span class="slop-badge">✨ Powered by AI ✨</span>
+  <h1 class="slop-h1">Unlock the Future of <span class="grad">Synergy</span></h1>
+  <p class="slop-sub">Seamlessly leverage cutting-edge, AI-powered solutions to revolutionize your workflow and empower your team to scale effortlessly.</p>
+  <div class="slop-cta-row">
+    <a class="slop-cta">Get Started Free →</a>
+    <a class="slop-cta-ghost">Book a Demo</a>
+  </div>
+  <div class="slop-stars">★★★★★ <span>Loved by 10,000+ teams worldwide</span></div>
 
-    <form class="check" id="check-form" autocomplete="off">
-      <input class="url" id="url" type="url" inputmode="url" placeholder="https://your-site.com" aria-label="Website URL" required />
-      <button class="go pressable" id="go" type="submit">Look</button>
-    </form>
-    <div id="captcha" hidden></div>
-    <p class="fineprint" id="fineprint">Renders at 1440&times;900 and 390&times;844. No sign-up. Public URLs only.</p>
-  </section>
+  <aside class="mark mark-badge">A sparkle emoji and the words "Powered by AI." Nobody confident in their design says this.</aside>
+  <aside class="mark mark-h1">Purple-to-blue gradient on the headline word. The single most common AI tell on the internet.</aside>
+  <aside class="mark mark-sub">"Seamlessly leverage cutting-edge solutions to revolutionize your workflow." A human did not write this. A prompt did.</aside>
+  <aside class="mark mark-font">Every word here is Inter. It is the default font of every AI site builder. It says nothing about you.</aside>
+</section>
 
-  <section class="result" id="result" hidden aria-live="polite"></section>
+<!-- ░░░ THE REVEAL ░░░ -->
+<section class="reveal">
+  <p class="reveal-kick">yeah. it's hideous.</p>
+  <h2 class="reveal-h">This whole page is every AI design cliche, on purpose.</h2>
+  <p class="reveal-body">Purple gradients. Inter. Emoji features. Fake five stars. We built the most generic-looking site we could and labeled every tell in red. Keep scrolling to see the rest. Then paste your own site and we'll do exactly this to it, except Claude does the looking.</p>
+  <p class="reveal-arrow">↓</p>
+</section>
 
-  <section class="how">
-    <h2>What a real browser sees that a test runner doesn't</h2>
-    <ul class="checks">
-      <li><b>Past the fold.</b> A headline taller than the first screen.</li>
-      <li><b>Text on text.</b> A reveal or label pinned over the headline.</li>
-      <li><b>Wrong font.</b> The brand face failed to load and rendered as Arial/system.</li>
-      <li><b>On the headline.</b> A control or element sitting on the words.</li>
-      <li><b>Console errors.</b> The page throws at load.</li>
-      <li><b>Side-scroll.</b> Something wider than the viewport.</li>
-    </ul>
-    <p class="note">eyeball is the hosted version of an <a href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">open-source render gate</a> you can also drop into CI. Same engine.</p>
-  </section>
+<!-- ░░░ MORE SLOP ░░░ -->
+<section class="slop-features">
+  <div class="slop-grid">
+    <div class="slop-card"><div class="slop-ico">🚀</div><h3>Lightning Fast</h3><p>Blazing-fast performance that scales seamlessly with your growing needs.</p></div>
+    <div class="slop-card"><div class="slop-ico">⚡</div><h3>Enterprise Ready</h3><p>Robust, secure, and reliable infrastructure built for teams of any size.</p></div>
+    <div class="slop-card"><div class="slop-ico">🎯</div><h3>AI-Powered</h3><p>Intelligent automation that empowers you to focus on what matters most.</p></div>
+  </div>
+  <aside class="mark mark-grid">Three identical rounded cards. Emoji icons. "Lightning Fast / Enterprise Ready / AI-Powered." You have seen this exact section ten thousand times.</aside>
+</section>
+
+<section class="slop-logos">
+  <p class="slop-logos-label">TRUSTED BY TEAMS AT</p>
+  <div class="slop-logo-row"><span>▱ Acme</span><span>◰ Globex</span><span>⬡ Initech</span><span>⬢ Umbrella</span><span>◍ Hooli</span></div>
+  <aside class="mark mark-logos">A "trusted by" wall of logos for companies that don't exist. Borrowed credibility with no source.</aside>
+</section>
+
+<!-- ░░░ THE CRAFTED PART ░░░ the one block that is not slop. the contrast is the point. -->
+<section class="tool" id="tool">
+  <p class="tool-kick">now the real thing</p>
+  <h2 class="tool-h">Does <em>your</em> site look like this?</h2>
+  <p class="tool-lede">Paste your URL. Claude looks at a real screenshot of your homepage and scores how AI-generated it looks, names every tell it finds, and tells you how to fix each one. Two free checks, no sign-up.</p>
+
+  <form class="tool-form" id="check-form" autocomplete="off">
+    <input class="tool-url" id="url" type="url" inputmode="url" placeholder="https://your-site.com" aria-label="Your website URL" required />
+    <button class="tool-go pressable" id="go" type="submit">Score it</button>
+  </form>
+  <div id="captcha" hidden></div>
+  <p class="tool-fine" id="fineprint"><span id="quota"></span>Public URLs only. We screenshot your homepage at desktop size, nothing else.</p>
+
+  <div class="result" id="result" hidden aria-live="polite"></div>
+</section>
+
+<!-- the catalog (real, crafted) -->
+<section class="catalog">
+  <h2>What counts as a tell</h2>
+  <ul class="tells">
+    <li><b>Converged fonts.</b> Inter, Roboto, Space Grotesk, the system stack. The fonts every generator reaches for.</li>
+    <li><b>The purple gradient.</b> Violet-to-blue on the headline or the hero. The flag everyone now reads as "AI made this."</li>
+    <li><b>Cookie-cutter layout.</b> Centered hero, three feature cards, a CTA. Same skeleton, different logo.</li>
+    <li><b>Emoji as icons.</b> 🚀 ⚡ 🎯 standing in for a real icon set or illustration.</li>
+    <li><b>Stock-prompt copy.</b> "Seamlessly leverage," "unlock the power of," "revolutionize your workflow."</li>
+    <li><b>No real motion, no character.</b> Nothing on the page that a person clearly chose on purpose.</li>
+  </ul>
+  <p class="catalog-note">eyeball isn't a lint rule guessing at strings. Claude looks at the rendered screenshot and judges it the way a sharp designer would, then hands you the fixes.</p>
+</section>
 </main>
 
 <footer class="foot">
   <span>eyeball &middot; built by the KTLYST team</span>
-  <a href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">github</a>
+  <a href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">the open-source render gate &rarr;</a>
 </footer>
 
 <script src="./app.js"></script>
