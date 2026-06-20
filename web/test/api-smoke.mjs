@@ -14,7 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { assertPublicUrl } from "../lib/guard.mjs";
 import { rateLimit, acquireSlot, releaseSlot, _reset } from "../lib/ratelimit.mjs";
 import { scoreFromSignals, DESIGN_SIGNALS_EXPR } from "../lib/aiscore.mjs";
-import { visionKillSwitchOn, storeReady, reserveSpend, consumeCaptchaToken, freeQuota, durableRateLimit } from "../lib/spendguard.mjs";
+import { visionKillSwitchOn, storeReady, reserveSpend, consumeCaptchaToken, freeQuotaPeek, freeQuotaConsume, durableRateLimit } from "../lib/spendguard.mjs";
 import { findBrowser } from "../lib/browser.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -60,8 +60,10 @@ async function main() {
   const reserve = await reserveSpend();
   ok("reserveSpend fails closed (no store -> no paid call)", reserve.ok === false && reserve.reason === "no-store");
   ok("captcha token consume false without store", (await consumeCaptchaToken("x")) === false);
-  const fq = await freeQuota("dev1", "1.2.3.4", false);
-  ok("freeQuota ungated without store", fq.left === null && fq.exhausted === false);
+  const fq = await freeQuotaPeek("dev1", "1.2.3.4");
+  ok("freeQuota peek ungated without store", fq.left === null && fq.exhausted === false);
+  const fqc = await freeQuotaConsume("dev1", "1.2.3.4");
+  ok("freeQuota consume ungated without store", fqc.left === null && fqc.exhausted === false);
   ok("durable rate limit fails open without store", (await durableRateLimit("1.2.3.4", 6, 60)).ok === true);
 
   // 4) abuse limiter

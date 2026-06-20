@@ -37,8 +37,26 @@ export function visionKillSwitchOn() { return process.env.VISION_ENABLED === "1"
 /** Whether the durable store is even configured (paid path is impossible without it). */
 export async function storeReady() { return !!(await redis()); }
 
+/* the day+month incr, the cap check, and the over-cap refund run in ONE atomic
+   Lua eval so a concurrent burst can't overshoot and a mid-sequence failure can't
+   leave a counter permanently overstated (the denial-of-wallet hole). Returns 1
+   if reserved under both caps, 0 if over (and atomically refunded). */
+const RESERVE_LUA = `
+local cost = tonumber(ARGV[1])
+local d = redis.call('INCRBY', KEYS[1], cost)
+if d == cost then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4])) end
+local m = redis.call('INCRBY', KEYS[2], cost)
+if m == cost then redis.call('EXPIRE', KEYS[2], tonumber(ARGV[5])) end
+if d > tonumber(ARGV[2]) or m > tonumber(ARGV[3]) then
+  redis.call('DECRBY', KEYS[1], cost)
+  redis.call('DECRBY', KEYS[2], cost)
+  return 0
+end
+return 1`;
+const REFUND_LUA = `redis.call('DECRBY', KEYS[1], tonumber(ARGV[1])); redis.call('DECRBY', KEYS[2], tonumber(ARGV[1])); return 1`;
+
 /* ── the circuit breaker. Atomically reserve est-cost BEFORE the paid call.
-   Returns {ok:true} only if a durable store is present AND both caps have room.
+   {ok:true} only if a durable store is present AND both caps have room.
    On any failure or missing store -> {ok:false} (fail closed). */
 export async function reserveSpend(estCents) {
   const cost = estCents != null ? estCents : intEnv("VISION_COST_CENTS", 2);
@@ -48,24 +66,17 @@ export async function reserveSpend(estCents) {
   const monthlyCap = intEnv("MONTHLY_CAP_CENTS", 5000);
   const dKey = `spend:day:${today()}`, mKey = `spend:mo:${month()}`;
   try {
-    const day = await r.incrby(dKey, cost);
-    if (day === cost) await r.expire(dKey, 60 * 60 * 26);     // first write of the day -> TTL
-    const mo = await r.incrby(mKey, cost);
-    if (mo === cost) await r.expire(mKey, 60 * 60 * 24 * 32);
-    if (day > dailyCap || mo > monthlyCap) {
-      await r.decrby(dKey, cost); await r.decrby(mKey, cost); // refund the overshoot
-      return { ok: false, reason: day > dailyCap ? "daily-cap" : "monthly-cap" };
-    }
-    return { ok: true };
+    const okv = await r.eval(RESERVE_LUA, [dKey, mKey], [String(cost), String(dailyCap), String(monthlyCap), String(60 * 60 * 26), String(60 * 60 * 24 * 32)]);
+    return Number(okv) === 1 ? { ok: true } : { ok: false, reason: "cap" };
   } catch { return { ok: false, reason: "store-error" }; }
 }
 
-/** Give budget back when the paid call did NOT happen (render failed, vision threw). */
+/** Give budget back when the paid call did NOT happen (render failed, vision threw). Atomic. */
 export async function refundSpend(estCents) {
   const cost = estCents != null ? estCents : intEnv("VISION_COST_CENTS", 2);
   const r = await redis();
   if (!r) return;
-  try { await r.decrby(`spend:day:${today()}`, cost); await r.decrby(`spend:mo:${month()}`, cost); } catch {}
+  try { await r.eval(REFUND_LUA, [`spend:day:${today()}`, `spend:mo:${month()}`], [String(cost)]); } catch {}
 }
 
 /* ── single-use Turnstile token (anti-replay). Returns true if this token has
@@ -81,26 +92,54 @@ export async function consumeCaptchaToken(token, ip) {
   } catch { return false; }
 }
 
-/* ── the free "N checks" ledger. Best-effort: durable when a store is present,
-   ungated (and harmless, since the free scan costs nothing) when it is not.
-   Returns {left, exhausted}. */
-export async function freeQuota(deviceKey, ip, consume) {
+/* ── the free "N checks" ledger. Atomic check-and-consume so concurrent requests
+   can't both slip past the limit (the TOCTOU hole). Durable when a store is
+   present; ungated (harmless, the free scan costs nothing) when it is not. */
+const FREE_CONSUME_LUA = `
+local limit = tonumber(ARGV[1])
+local dv = tonumber(redis.call('GET', KEYS[1]) or '0')
+local ip = tonumber(redis.call('GET', KEYS[2]) or '0')
+if math.max(dv, ip) >= limit then return -1 end
+local nd = redis.call('INCR', KEYS[1]); if nd == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
+local ni = redis.call('INCR', KEYS[2]); if ni == 1 then redis.call('EXPIRE', KEYS[2], tonumber(ARGV[2])) end
+local left = limit - math.max(nd, ni)
+if left < 0 then left = 0 end
+return left`;
+const FREE_REFUND_LUA = `
+if tonumber(redis.call('GET', KEYS[1]) or '0') > 0 then redis.call('DECR', KEYS[1]) end
+if tonumber(redis.call('GET', KEYS[2]) or '0') > 0 then redis.call('DECR', KEYS[2]) end
+return 1`;
+const freeKeys = (deviceKey, ip) => [`free:dev:${deviceKey || "anon"}`, `free:ip:${ipSubnet(ip)}`];
+
+/** Non-consuming peek (config endpoint display only). */
+export async function freeQuotaPeek(deviceKey, ip) {
   const limit = intEnv("FREE_LIMIT", 2);
   const r = await redis();
   if (!r) return { left: null, exhausted: false };
   try {
-    const dKey = `free:dev:${deviceKey || "anon"}`;
-    const ipKey = `free:ip:${ipSubnet(ip)}`;
-    if (!consume) {
-      const [d, i] = await Promise.all([r.get(dKey), r.get(ipKey)]);
-      const used = Math.max(parseInt(d || "0", 10) || 0, parseInt(i || "0", 10) || 0);
-      return { left: Math.max(0, limit - used), exhausted: used >= limit };
-    }
-    const d = await r.incr(dKey); if (d === 1) await r.expire(dKey, 60 * 60 * 24 * 30);
-    const i = await r.incr(ipKey); if (i === 1) await r.expire(ipKey, 60 * 60 * 24 * 30);
-    const used = Math.max(d, i);
-    return { left: Math.max(0, limit - used), exhausted: used > limit };
+    const [d, i] = await Promise.all(freeKeys(deviceKey, ip).map((k) => r.get(k)));
+    const used = Math.max(parseInt(d || "0", 10) || 0, parseInt(i || "0", 10) || 0);
+    return { left: Math.max(0, limit - used), exhausted: used >= limit };
   } catch { return { left: null, exhausted: false }; }
+}
+
+/** Atomically reserve ONE free credit BEFORE the paid call. exhausted=true (and
+   nothing consumed) once the limit is reached. */
+export async function freeQuotaConsume(deviceKey, ip) {
+  const limit = intEnv("FREE_LIMIT", 2);
+  const r = await redis();
+  if (!r) return { left: null, exhausted: false };   // no store -> ungated (free scan is free)
+  try {
+    const left = Number(await r.eval(FREE_CONSUME_LUA, freeKeys(deviceKey, ip), [String(limit), String(60 * 60 * 24 * 30)]));
+    return left < 0 ? { left: 0, exhausted: true } : { left, exhausted: false };
+  } catch { return { left: null, exhausted: false }; }
+}
+
+/** Hand a consumed credit back when the paid call did not happen. */
+export async function freeQuotaRefund(deviceKey, ip) {
+  const r = await redis();
+  if (!r) return;
+  try { await r.eval(FREE_REFUND_LUA, freeKeys(deviceKey, ip), []); } catch {}
 }
 
 /* ── durable per-IP fixed-window limiter (second layer behind the in-memory one). */

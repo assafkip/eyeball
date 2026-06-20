@@ -1,7 +1,7 @@
 /* eyeball-web — api/config.mjs : public client config.
    Exposes the Turnstile SITE key (public by design; the SECRET stays server-side)
    and the visitor's remaining free deep-reads. No secrets, ever. */
-import { freeQuota } from "../lib/spendguard.mjs";
+import { freeQuotaPeek } from "../lib/spendguard.mjs";
 
 function getCookie(req, name) {
   const raw = (req.headers && req.headers.cookie) || "";
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
   let freeLeft = null;
   try {
-    const q = await freeQuota(getCookie(req, "eb_dev"), clientIp(req), false);
+    const q = await freeQuotaPeek(getCookie(req, "eb_dev"), clientIp(req));
     freeLeft = q.left;   // null when no durable store (free tier ungated, costs nothing)
   } catch { /* leave null */ }
 

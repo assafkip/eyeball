@@ -25,9 +25,15 @@ import { rateLimit, acquireSlot, releaseSlot } from "../lib/ratelimit.mjs";
 import { DESIGN_SIGNALS_EXPR, scoreFromSignals } from "../lib/aiscore.mjs";
 import { scoreDesign, isJpegBase64 } from "../lib/vision.mjs";
 import {
-  visionKillSwitchOn, storeReady, reserveSpend, refundSpend,
-  consumeCaptchaToken, freeQuota, durableRateLimit,
+  visionKillSwitchOn, storeReady, reserveSpend, refundSpend, consumeCaptchaToken,
+  freeQuotaConsume, freeQuotaPeek, freeQuotaRefund, durableRateLimit,
 } from "../lib/spendguard.mjs";
+
+// fail loud on a half-configured paid path (kill switch on but a gate missing).
+if (process.env.VISION_ENABLED === "1" &&
+    (!process.env.ANTHROPIC_API_KEY || !process.env.TURNSTILE_SECRET || !process.env.UPSTASH_REDIS_REST_URL)) {
+  console.error("eyeball: VISION_ENABLED=1 but ANTHROPIC_API_KEY / TURNSTILE_SECRET / UPSTASH not all set — paid path stays OFF (fail-closed).");
+}
 
 const PER_MIN = 6, PER_HOUR = 40, MAX_CONCURRENT = 4;
 const RENDER_TIMEOUT_MS = 14000;
@@ -157,20 +163,24 @@ export async function runCheck(rawUrl, ctx = {}) {
     && (await storeReady());                   // no durable cap, no paid call
 
   if (paidEligible) {
-    const q = await freeQuota(ctx.deviceKey, ctx.ip, false);
+    // atomically reserve ONE free credit BEFORE the paid call (no TOCTOU race)
+    const q = await freeQuotaConsume(ctx.deviceKey, ctx.ip);
     freeLeft = q.left;
     if (q.exhausted) {
       paywalled = true;                        // out of free deep reads -> quick scan only
-    } else if (await captchaOkForVision(ctx.captchaToken, ctx.ip)) {
-      const reserve = await reserveSpend();    // atomic, BEFORE the paid call
-      if (reserve.ok) {
-        try {
-          report = await scoreDesign(screenshot);
-          const used = await freeQuota(ctx.deviceKey, ctx.ip, true);
-          freeLeft = used.left;
-        } catch { await refundSpend(); /* paid call failed -> refund + keep free scan */ }
+    } else {
+      let did = false;
+      if (await captchaOkForVision(ctx.captchaToken, ctx.ip)) {
+        const reserve = await reserveSpend();  // atomic spend reserve, BEFORE the paid call
+        if (reserve.ok) {
+          try { report = await scoreDesign(screenshot); did = true; }
+          catch { await refundSpend(); /* paid call failed -> refund spend */ }
+        }
       }
-      // reserve not ok (over cap) -> keep the free scan, consume no credit
+      if (!did) {                              // captcha fail / over cap / vision error -> give the credit back
+        await freeQuotaRefund(ctx.deviceKey, ctx.ip);
+        freeLeft = (await freeQuotaPeek(ctx.deviceKey, ctx.ip)).left;
+      }
     }
   }
   return { url: rawUrl, ...report, freeLeft, paywalled };
