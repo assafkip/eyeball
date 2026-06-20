@@ -78,21 +78,27 @@ function noBrowserError() {
   return e;
 }
 
-function launch(browser, extraArgs = []) {
+function launch(browser, extraArgs = [], pipe = false, env = undefined) {
   const udd = mkdtempSync(join(tmpdir(), "eyeball-"));
   const isShell = /headless[-_]shell/.test(browser);
   const args = [
-    "--remote-debugging-port=0", `--user-data-dir=${udd}`,
+    `--user-data-dir=${udd}`,
     "--no-first-run", "--no-default-browser-check", "--disable-extensions",
     "--disable-gpu", "--hide-scrollbars", "--mute-audio",
     "--disable-background-networking", "--disable-sync", "--no-sandbox",
     ...extraArgs,                                          // e.g. serverless chromium flags
   ];
+  // CDP transport: a debugging PIPE (fd 3/4) works under serverless single-process
+  // chromium, where the debugging PORT never binds (DevToolsActivePort never gets
+  // written -> hang). The port is the zero-config local default. (scar: @sparticuz
+  // on Lambda needs --single-process, which is incompatible with the port.)
+  args.push(pipe ? "--remote-debugging-pipe" : "--remote-debugging-port=0");
   // don't double-add headless if the binary is a headless shell or the caller's
   // extraArgs already set a headless mode (serverless chromium passes its own).
   const hasHeadless = isShell || extraArgs.some((a) => String(a).startsWith("--headless"));
   if (!hasHeadless) args.push("--headless=new");
-  const child = spawn(browser, args, { stdio: ["ignore", "pipe", "pipe"] });
+  const stdio = pipe ? ["ignore", "ignore", "pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"];
+  const child = spawn(browser, args, env ? { stdio, env } : { stdio });
   child.on("error", () => {});
   return { child, udd };
 }
@@ -112,21 +118,51 @@ async function wsEndpoint(udd, timeoutMs = 12000) {
   throw new Error("eyeball: browser did not expose a CDP endpoint (DevToolsActivePort)");
 }
 
-/* ── a minimal CDP client over the built-in WebSocket. */
-class CDP {
+/* ── CDP transports. WsTransport drives the debugging PORT (local default);
+   PipeTransport drives fd 3 (write) / fd 4 (read) with NUL-delimited JSON, which is
+   what serverless single-process chromium supports. CDP is transport-agnostic. */
+class WsTransport {
   constructor(ws) {
-    this.ws = ws; this.id = 0; this.pending = new Map(); this.handlers = []; this.closed = false;
-    // if the browser dies or the socket drops, reject every in-flight command so
+    this.ws = ws; this.onmessage = null; this.onclose = null;
+    ws.addEventListener("message", (e) => this.onmessage && this.onmessage(e.data));
+    ws.addEventListener("close", () => this.onclose && this.onclose());
+    ws.addEventListener("error", () => this.onclose && this.onclose());
+  }
+  send(str) { this.ws.send(str); }
+  close() { try { this.ws.close(); } catch { /* already closed */ } }
+}
+
+class PipeTransport {
+  constructor(writable, readable) {
+    this.writable = writable; this.onmessage = null; this.onclose = null;
+    let buf = "";
+    readable.on("data", (chunk) => {
+      buf += chunk.toString("utf8");
+      let i;
+      while ((i = buf.indexOf("\0")) !== -1) {
+        const msg = buf.slice(0, i); buf = buf.slice(i + 1);
+        if (this.onmessage) this.onmessage(msg);
+      }
+    });
+    readable.on("close", () => this.onclose && this.onclose());
+    readable.on("error", () => this.onclose && this.onclose());
+  }
+  send(str) { this.writable.write(str + "\0"); }
+  close() { try { this.writable.end(); } catch { /* already closed */ } }
+}
+
+class CDP {
+  constructor(transport) {
+    this.t = transport; this.id = 0; this.pending = new Map(); this.handlers = []; this.closed = false;
+    // if the browser dies or the transport drops, reject every in-flight command so
     // the gate FAILS CLOSED instead of hanging CI forever (no silent deadlock).
-    const failAll = (msg) => {
+    transport.onclose = () => {
       this.closed = true;
-      for (const { reject } of this.pending.values()) reject(new Error(msg));
+      for (const { reject } of this.pending.values()) reject(new Error("eyeball: CDP connection closed (browser exited?)"));
       this.pending.clear();
     };
-    ws.addEventListener("close", () => failAll("eyeball: CDP connection closed (browser exited?)"));
-    ws.addEventListener("error", () => failAll("eyeball: CDP connection error"));
-    ws.addEventListener("message", (ev) => {
-      let m; try { m = JSON.parse(ev.data); } catch { return; }
+    transport.onmessage = (data) => {
+      let m; try { m = JSON.parse(data); } catch { return; }
       if (m.id && this.pending.has(m.id)) {
         const { resolve: res, reject: rej } = this.pending.get(m.id);
         this.pending.delete(m.id);
@@ -134,7 +170,7 @@ class CDP {
       } else if (m.method) {
         for (const h of this.handlers) h(m);
       }
-    });
+    };
   }
   send(method, params = {}, sessionId) {
     if (this.closed) return Promise.reject(new Error("eyeball: CDP connection is closed"));
@@ -149,7 +185,7 @@ class CDP {
         resolve: (v) => { clearTimeout(timer); res(v); },
         reject: (e) => { clearTimeout(timer); rej(e); },
       });
-      try { this.ws.send(JSON.stringify(msg)); }
+      try { this.t.send(JSON.stringify(msg)); }
       catch (e) { clearTimeout(timer); this.pending.delete(id); rej(e); }
     });
   }
@@ -165,7 +201,7 @@ function connect(url) {
 }
 
 /* in-page measurement; the selector contract + requested globals are injected. */
-function measureExpr(selectors, requireGlobals) {
+export function measureExpr(selectors, requireGlobals) {
   return `(() => {
     const SEL = ${JSON.stringify(selectors)};
     const GLOBALS = ${JSON.stringify(requireGlobals || [])};
@@ -186,7 +222,7 @@ function measureExpr(selectors, requireGlobals) {
   })()`;
 }
 
-const SCROLL_FIRE_EXPR = `(async () => {
+export const SCROLL_FIRE_EXPR = `(async () => {
   const h = document.documentElement.scrollHeight || 0;
   for (const f of [0.2, 0.4, 0.6, 0.8, 1]) { window.scrollTo(0, h * f); await new Promise(r => setTimeout(r, 120)); }
   window.scrollTo(0, 0); await new Promise(r => setTimeout(r, 200));
@@ -217,15 +253,28 @@ export async function render(target, config) {
   // iframe/fetch/ws) and abort any whose host is blocked. Unset = CLI default.
   const blockHost = config && config.blockHost;
 
-  // browserPath override (e.g. serverless @sparticuz/chromium, or a user's own
-  // chrome) skips disk discovery; unset preserves the zero-config default.
-  const browser = (config && config.browserPath) || findBrowser();
-  if (!browser) throw noBrowserError();
-  const { child, udd } = launch(browser, (config && config.browserArgs) || []);
-  let ws;
+  // cdpEndpoint: connect to a browser someone else launched (e.g. the web app
+  // launches @sparticuz chromium via puppeteer-core, which sets up its shared libs
+  // + env correctly, then hands us its CDP ws). Otherwise launch one ourselves.
+  const cdpEndpoint = config && config.cdpEndpoint;
+  const pipe = !cdpEndpoint && !!(config && (config.pipe || ((config.browserArgs || []).includes("--remote-debugging-pipe"))));
+  let child = null, udd = null, stderrTail = "";
+  if (!cdpEndpoint) {
+    const browser = (config && config.browserPath) || findBrowser();
+    if (!browser) throw noBrowserError();
+    ({ child, udd } = launch(browser, (config && config.browserArgs) || [], pipe, config && config.browserEnv));
+    // capture chromium's stderr so a launch crash surfaces its reason. stdio[2].
+    const errStream = child.stdio && child.stdio[2];
+    if (errStream && errStream.on) errStream.on("data", (d) => { stderrTail = (stderrTail + d.toString()).slice(-1500); });
+  }
+  let transport;
   try {
-    ws = await connect(await wsEndpoint(udd));
-    const cdp = new CDP(ws);
+    transport = cdpEndpoint
+      ? new WsTransport(await connect(cdpEndpoint))
+      : pipe
+        ? new PipeTransport(child.stdio[3], child.stdio[4])
+        : new WsTransport(await connect(await wsEndpoint(udd)));
+    const cdp = new CDP(transport);
     const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
     const S = (m, p) => cdp.send(m, p, sessionId);
@@ -290,10 +339,13 @@ export async function render(target, config) {
       viewports.push(facts);
     }
     return { viewports };
+  } catch (e) {
+    if (stderrTail) e.message += " | chromium: " + stderrTail.replace(/\s+/g, " ").trim().slice(-500);
+    throw e;
   } finally {
-    try { if (ws) ws.close(); } catch {}
-    try { child.kill("SIGKILL"); } catch {}
-    try { rmSync(udd, { recursive: true, force: true }); } catch {}
+    try { if (transport) transport.close(); } catch {}
+    try { if (child) child.kill("SIGKILL"); } catch {}
+    try { if (udd) rmSync(udd, { recursive: true, force: true }); } catch {}
   }
 }
 

@@ -8,10 +8,10 @@
     "test": "node test/api-smoke.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": "20.x"
   },
   "dependencies": {
     "@sparticuz/chromium": "^131.0.0",
-    "playwright-core": "^1.49.0"
+    "puppeteer-core": "^23.0.0"
   }
 }

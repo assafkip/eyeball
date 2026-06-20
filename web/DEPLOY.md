@@ -15,20 +15,31 @@ engine (`../src/render.mjs`) on serverless chromium.
 - **API smoke:** `node test/api-smoke.mjs` -> 27 checks (SSRF host table incl.
   encoded IPs / IPv6 / private-AAAA / rebind, pure report, file:// engine render).
 
-## Deploy (Vercel preview)
+## Deploy status (2026-06-20)
 
-Because `api/check.mjs` imports the engine from `../../src`, the deploy roots at
-the eyeball REPO (not `web/`) so the engine is bundled. A root `vercel.json` points
-the build at `web/` and registers the function. Deploy to a PREVIEW (never prod):
+Deployed to a Vercel preview (project `eyeball-web`, scope `assaf-kipnis-projects`,
+SSO-walled). The engine is vendored into `web/lib/engine`, so the deploy roots at
+`web/` and is self-contained.
 
 ```
-cd ~/projects/eyeball
-vercel deploy            # preview; scope/login as needed
+cd ~/projects/eyeball/web
+vercel deploy --yes --scope assaf-kipnis-projects     # preview, SSO-walled
 ```
 
-PREVIEW URL: (filled in after the preview deploy)
-Deployed /api/check sample: (filled in: a report JSON for a sample URL)
-Landing console errors: 0 (dogfood-verified locally; re-confirm on the preview)
+- **Landing: LIVE** (renders behind the SSO wall; dogfood-verified locally at both viewports).
+- **/api/check: BLOCKED by an external @sparticuz/Vercel runtime issue.** Chromium
+  exits at launch with `libnss3.so: cannot open shared object file`. This is NOT the
+  eyeball code: the canonical `puppeteer-core` launch fails identically, and the
+  same handler renders correctly LOCALLY (score 72 on example.com). It is the
+  well-known "@sparticuz libnss3 missing on the Vercel Node 22.x+ runtime" issue
+  (Vercel community: "Libnss3.so missing in Node 22.x"). Tried + ruled out: raw-spawn
+  + pipe transport, puppeteer-core, `LD_LIBRARY_PATH=/tmp`, pinning `engines` to
+  Node 20.x.
+- **Fix path (next, ~1-2 cycles):** set the Vercel PROJECT Node version explicitly
+  to 20.x (the dashboard setting, not just `engines`), OR move to
+  `@sparticuz/chromium-min` + a hosted brotli pack matched to the runtime, OR a
+  separate always-on render service / a hosted browser API (Browserless). The MVP
+  works end-to-end locally; only the serverless chromium runtime needs this dialed in.
 
 ## SECURITY: pre-public-launch gate (REQUIRED before advertising this URL)
 
