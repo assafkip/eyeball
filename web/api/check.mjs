@@ -13,6 +13,7 @@
 
 import dns from "node:dns/promises";
 import { dirname } from "node:path";
+import { readdirSync, existsSync } from "node:fs";
 import { assertPublicUrl, hostIsBlocked, BlockedUrlError } from "../lib/guard.mjs";
 import { buildReport } from "../lib/report.mjs";
 import { render, measureExpr, SCROLL_FIRE_EXPR } from "../lib/engine/render.mjs";   // vendored copy of ../../src
@@ -65,13 +66,16 @@ async function serverlessBrowser() {
   // lazy: only needed for the real render, not for the unit smoke / local dev.
   try {
     const chromium = (await import("@sparticuz/chromium")).default;
+    // @sparticuz only extracts the NSS libs (libnss3/libnspr4) when it detects a
+    // Lambda runtime AT IMPORT; Vercel doesn't set that, so it shipped only the
+    // graphics libs and chromium exited "libnss3.so missing" (confirmed by diag).
+    // setGraphicsMode(false) drops the swiftshader libs we don't need; the
+    // AWS_LAMBDA_JS_RUNTIME env (set at deploy, before this lazy import) triggers
+    // the full lib extraction; LD_LIBRARY_PATH points chromium at the exec dir.
+    try { if (typeof chromium.setGraphicsMode === "function") chromium.setGraphicsMode(false); else chromium.setGraphicsMode = false; } catch { /* version-dependent */ }
     const browserPath = await chromium.executablePath();
-    // @sparticuz decompresses chromium + its shared libs (libnss3.so etc.) to /tmp;
-    // off-Lambda hosts must point LD_LIBRARY_PATH there or chromium exits with
-    // "error while loading shared libraries". puppeteer spawns with process.env, so
-    // set it on the process (not a per-call env). (libnss3.so scar, Vercel runtime.)
     const libDir = browserPath ? dirname(browserPath) : "/tmp";
-    process.env.LD_LIBRARY_PATH = ["/tmp", libDir, "/tmp/lib", process.env.LD_LIBRARY_PATH].filter(Boolean).join(":");
+    process.env.LD_LIBRARY_PATH = [libDir, "/tmp", process.env.LD_LIBRARY_PATH].filter(Boolean).join(":");
     return {
       browserPath,
       browserArgs: chromium.args || [],
@@ -173,7 +177,33 @@ function send(res, code, body) {
   res.end(JSON.stringify(body));
 }
 
+/* DIRECT diagnostic (debug only): look at the actual runtime instead of guessing.
+   Reports the live Node version + where libnss3.so really is + the real lib path. */
+function findFile(needle, roots) {
+  const hits = [];
+  const walk = (dir, depth) => {
+    if (depth > 4 || hits.length > 12) return;
+    let es = [];
+    try { es = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of es) {
+      const p = dir + "/" + e.name;
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.name.includes(needle)) hits.push(p);
+    }
+  };
+  for (const r of roots) if (existsSync(r)) walk(r, 0);
+  return hits;
+}
+
 export default async function handler(req, res) {
+  if (process.env.EYEBALL_DEBUG === "1" && req.query && req.query.diag) {
+    const info = { node: process.version, platform: process.platform + "/" + process.arch, ld: process.env.LD_LIBRARY_PATH || null, cwd: process.cwd() };
+    try { const sb = await serverlessBrowser(); info.execPath = sb.browserPath || null; } catch (e) { info.sparticuzError = String((e && e.message) || e); }
+    const roots = ["/tmp", "/var/task/node_modules/@sparticuz", info.execPath ? dirname(info.execPath) : "/tmp", process.cwd() + "/node_modules/@sparticuz"];
+    info.libnss3 = findFile("libnss3.so", roots);
+    info.someSo = findFile(".so", roots).slice(0, 10);
+    return send(res, 200, info);
+  }
   let raw = "";
   try {
     const fromQuery = req.query && req.query.url;

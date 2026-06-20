@@ -26,20 +26,29 @@ cd ~/projects/eyeball/web
 vercel deploy --yes --scope assaf-kipnis-projects     # preview, SSO-walled
 ```
 
-- **Landing: LIVE** (renders behind the SSO wall; dogfood-verified locally at both viewports).
-- **/api/check: BLOCKED by an external @sparticuz/Vercel runtime issue.** Chromium
-  exits at launch with `libnss3.so: cannot open shared object file`. This is NOT the
-  eyeball code: the canonical `puppeteer-core` launch fails identically, and the
-  same handler renders correctly LOCALLY (score 72 on example.com). It is the
-  well-known "@sparticuz libnss3 missing on the Vercel Node 22.x+ runtime" issue
-  (Vercel community: "Libnss3.so missing in Node 22.x"). Tried + ruled out: raw-spawn
-  + pipe transport, puppeteer-core, `LD_LIBRARY_PATH=/tmp`, pinning `engines` to
-  Node 20.x.
-- **Fix path (next, ~1-2 cycles):** set the Vercel PROJECT Node version explicitly
-  to 20.x (the dashboard setting, not just `engines`), OR move to
-  `@sparticuz/chromium-min` + a hosted brotli pack matched to the runtime, OR a
-  separate always-on render service / a hosted browser API (Browserless). The MVP
-  works end-to-end locally; only the serverless chromium runtime needs this dialed in.
+- **Landing + /api/check: LIVE and rendering** behind the SSO wall.
+  `/api/check?url=https://example.com` returns a real report (ok:true, score 100).
+
+### How the serverless render was fixed (the libnss3 crack)
+
+A live diagnostic (`/api/check?diag=1`, debug-only) showed the truth: Node was 20.x
+(fine), but `libnss3.so` was genuinely absent and only the graphics libs
+(swiftshader) had been extracted to /tmp. Root cause: `@sparticuz/chromium` only
+extracts the NSS crypto libs when it detects a Lambda runtime AT IMPORT, which
+Vercel does not set. Fix (in `api/check.mjs` + deploy):
+- `chromium.setGraphicsMode(false)` (drop the swiftshader libs we don't need),
+- `process.env.LD_LIBRARY_PATH = dirname(executablePath)` before launch,
+- deploy env `AWS_LAMBDA_JS_RUNTIME=nodejs20.x` so @sparticuz extracts the full
+  lib set (this is the breakthrough). Engine pinned to Node 20.x.
+
+**Deploy command (the env var is REQUIRED):**
+```
+vercel deploy --yes --scope assaf-kipnis-projects -e AWS_LAMBDA_JS_RUNTIME=nodejs20.x
+```
+Best: also set `AWS_LAMBDA_JS_RUNTIME=nodejs20.x` for ALL environments in the
+Vercel dashboard (Settings -> Environment Variables) so plain `vercel deploy`
+works without `-e`. The CLI env-add for the Preview target was flaky in testing;
+the dashboard is the reliable place.
 
 ## SECURITY: pre-public-launch gate (REQUIRED before advertising this URL)
 
