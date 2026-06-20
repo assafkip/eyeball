@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>eyeball — is your site actually broken?</title>
+<meta name="description" content="Paste a URL. A real browser renders it at desktop and mobile and tells you what's visually broken: headline past the fold, text on text, a font that fell back to Arial, console errors. The stuff your tests pass right over." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1714'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='8' fill='none' stroke='%23e8a13a' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23e8a13a'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<header class="bar">
+  <span class="brand"><span class="eye" aria-hidden="true"></span> eyeball</span>
+  <a class="ghost" href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">open source &rarr;</a>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="kicker">render health, in one paste</p>
+    <h1 data-hero-h1 id="head">Your site passes every test and still looks broken.</h1>
+    <p class="lede">Functional tests check that buttons click. They never see a headline shoved past the fold, two sentences printed on the same pixels, or a font that quietly fell back to Arial. A real browser does. So does eyeball.</p>
+
+    <form class="check" id="check-form" autocomplete="off">
+      <input class="url" id="url" type="url" inputmode="url" placeholder="https://your-site.com" aria-label="Website URL" required />
+      <button class="go pressable" id="go" type="submit">Look</button>
+    </form>
+    <p class="fineprint" id="fineprint">Renders at 1440&times;900 and 390&times;844. No sign-up. Public URLs only.</p>
+  </section>
+
+  <section class="result" id="result" hidden aria-live="polite"></section>
+
+  <section class="how">
+    <h2>What a real browser sees that a test runner doesn't</h2>
+    <ul class="checks">
+      <li><b>Past the fold.</b> A headline taller than the first screen.</li>
+      <li><b>Text on text.</b> A reveal or label pinned over the headline.</li>
+      <li><b>Wrong font.</b> The brand face failed to load and rendered as Arial/system.</li>
+      <li><b>On the headline.</b> A control or element sitting on the words.</li>
+      <li><b>Console errors.</b> The page throws at load.</li>
+      <li><b>Side-scroll.</b> Something wider than the viewport.</li>
+    </ul>
+    <p class="note">eyeball is the hosted version of an <a href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">open-source render gate</a> you can also drop into CI. Same engine.</p>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>eyeball &middot; built by the KTLYST team</span>
+  <a href="https://github.com/assafkip/eyeball" target="_blank" rel="noopener">github</a>
+</footer>
+
+<script src="./app.js"></script>
+</body>
+</html>

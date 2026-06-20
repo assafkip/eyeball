@@ -1,0 +1,17 @@
+{
+  "name": "eyeball-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted eyeball: paste a URL, get a render-health report. The free front for the eyeball render gate.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/api-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.0",
+    "playwright-core": "^1.49.0"
+  }
+}
